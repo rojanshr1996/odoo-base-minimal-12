@@ -4,7 +4,6 @@ odoo.define('web_editor.root_widget', function (require) {
 var Class = require('web.Class');
 var dom = require('web.dom');
 var mixins = require('web.mixins');
-var session = require('web.session');
 var Widget = require('web.Widget');
 
 /**
@@ -16,13 +15,13 @@ var Widget = require('web.Widget');
 var RootWidget = Widget.extend({
     custom_events: _.extend({}, Widget.prototype.custom_events || {}, {
         registry_update: '_onRegistryUpdate',
-        get_session: '_onGetSession',
     }),
     /**
      * @constructor
      */
     init: function () {
         this._super.apply(this, arguments);
+
         this._widgets = [];
         this._listenToUpdates = false;
         this._getRegistry().setParent(this);
@@ -98,17 +97,6 @@ var RootWidget = Widget.extend({
     // Handlers
     //--------------------------------------------------------------------------
 
-    /**
-     * Get the curuent session module.
-     *
-     * @private
-     * @param {OdooEvent} ev
-     */
-    _onGetSession: function (event) {
-        if (event.data.callback) {
-            event.data.callback(session);
-        }
-    },
     /**
      * Called when the linked registry is updated after this `RootWidget`
      *

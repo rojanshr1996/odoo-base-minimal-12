@@ -53,7 +53,7 @@ QUnit.module('widgets', {
             data: this.data,
             arch: '<tree><field name="foo"/></tree>',
             viewOptions: {
-                hasSidebar: true,
+                sidebar: true,
             },
             mockRPC: function (route) {
                 if (route === '/web/export/formats') {
@@ -94,7 +94,7 @@ QUnit.module('widgets', {
             },
         });
 
-        list.searchView = {
+        list.getParent().searchview = {
             build_search_data: function () {
                 assert.step('build_search_data');
                 return {
@@ -144,7 +144,7 @@ QUnit.module('widgets', {
             data: this.data,
             arch: '<tree><field name="foo"/></tree>',
             viewOptions: {
-                hasSidebar: true,
+                sidebar: true,
             },
             mockRPC: function (route) {
                 if (route === '/web/export/formats') {
@@ -171,7 +171,7 @@ QUnit.module('widgets', {
             },
         });
 
-        list.searchView = {
+        list.getParent().searchview = {
             build_search_data: function () {
                 assert.step('build_search_data');
                 return {

@@ -1,13 +1,12 @@
 odoo.define('web_editor.rte', function (require) {
 'use strict';
 
-var base = require('web_editor.base');
 var concurrency = require('web.concurrency');
 var core = require('web.core');
 var Widget = require('web.Widget');
 var weContext = require('web_editor.context');
 var summernote = require('web_editor.summernote');
-var summernoteCustomColors = require('web_editor.rte.summernote_custom_colors');
+var weWidgets = require('web_editor.widget');
 
 var _t = core._t;
 
@@ -261,7 +260,7 @@ var RTEWidget = Widget.extend({
 
         this._getConfig = getConfig || this._getDefaultConfig;
 
-        base.computeFonts();
+        weWidgets.computeFonts();
     },
     /**
      * @override
@@ -273,20 +272,6 @@ var RTEWidget = Widget.extend({
 
         $.fn.carousel = this.edit_bootstrap_carousel;
 
-        $(document).on('click.rte keyup.rte', function () {
-            var current_range = {};
-            try {
-                current_range = range.create() || {};
-            } catch (e) {
-                // if range is on Restricted element ignore error
-            }
-            var $popover = $(current_range.sc).closest('[contenteditable]');
-            var popover_history = ($popover.data()||{}).NoteHistory;
-            if (!popover_history || popover_history === history) return;
-            var editor = $popover.parent('.note-editor');
-            $('button[data-event="undo"]', editor).attr('disabled', !popover_history.hasUndo());
-            $('button[data-event="redo"]', editor).attr('disabled', !popover_history.hasRedo());
-        });
         $(document).on('mousedown.rte activate.rte', this, this._onMousedown.bind(this));
         $(document).on('mouseup.rte', this, this._onMouseup.bind(this));
 
@@ -334,7 +319,7 @@ var RTEWidget = Widget.extend({
 
         $('body').addClass('editor_enable');
 
-        $(document.body)
+        $(document)
             .tooltip({
                 selector: '[data-oe-readonly]',
                 container: 'body',
@@ -379,10 +364,8 @@ var RTEWidget = Widget.extend({
         $('#wrapwrap, .o_editable').off('.rte');
 
         $('.o_not_editable').removeAttr('contentEditable');
-
-        $(document).off('click.rte keyup.rte mousedown.rte activate.rte mouseup.rte');
         $(document).off('content_changed').removeClass('o_is_inline_editable').removeData('rte');
-        $(document).tooltip('dispose');
+        $(document).tooltip('destroy');
         $('body').removeClass('editor_enable');
         this.trigger('rte:stop');
     },
@@ -551,8 +534,7 @@ var RTEWidget = Widget.extend({
             'lang': 'odoo',
             'onChange': function (html, $editable) {
                 $editable.trigger('content_changed');
-            },
-            'colors': summernoteCustomColors,
+            }
         };
     },
     /**
@@ -592,10 +574,8 @@ var RTEWidget = Widget.extend({
                 $el.data('oe-id'),
                 this._getEscapedElement($el).prop('outerHTML'),
                 $el.data('oe-xpath') || null,
+                withLang ? context : _.omit(context, 'lang')
             ],
-            context: context,
-        }, withLang ? undefined : {
-            noContextKeys: 'lang',
         });
     },
 
@@ -731,19 +711,4 @@ return {
     Class: RTEWidget,
     history: history,
 };
-});
-
-odoo.define('web_editor.rte.summernote_custom_colors', function (require) {
-'use strict';
-
-return [
-    ['#000000', '#424242', '#636363', '#9C9C94', '#CEC6CE', '#EFEFEF', '#F7F7F7', '#FFFFFF'],
-    ['#FF0000', '#FF9C00', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#9C00FF', '#FF00FF'],
-    ['#F7C6CE', '#FFE7CE', '#FFEFC6', '#D6EFD6', '#CEDEE7', '#CEE7F7', '#D6D6E7', '#E7D6DE'],
-    ['#E79C9C', '#FFC69C', '#FFE79C', '#B5D6A5', '#A5C6CE', '#9CC6EF', '#B5A5D6', '#D6A5BD'],
-    ['#E76363', '#F7AD6B', '#FFD663', '#94BD7B', '#73A5AD', '#6BADDE', '#8C7BC6', '#C67BA5'],
-    ['#CE0000', '#E79439', '#EFC631', '#6BA54A', '#4A7B8C', '#3984C6', '#634AA5', '#A54A7B'],
-    ['#9C0000', '#B56308', '#BD9400', '#397B21', '#104A5A', '#085294', '#311873', '#731842'],
-    ['#630000', '#7B3900', '#846300', '#295218', '#083139', '#003163', '#21104A', '#4A1031']
-];
 });

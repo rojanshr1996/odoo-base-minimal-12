@@ -7,7 +7,6 @@ odoo.define('web.KanbanModel', function (require) {
  */
 
 var BasicModel = require('web.BasicModel');
-var viewUtils = require('web.viewUtils');
 
 var KanbanModel = BasicModel.extend({
 
@@ -34,7 +33,7 @@ var KanbanModel = BasicModel.extend({
             parentID: groupID,
         });
 
-        var def = this._fetchRecord(new_record).then(function (result) {
+        return this._fetchRecord(new_record).then(function (result) {
             group.data.unshift(new_record.id);
             group.res_ids.unshift(resId);
             group.count++;
@@ -45,7 +44,6 @@ var KanbanModel = BasicModel.extend({
 
             return result.id;
         });
-        return this._reloadProgressBarGroupFromRecord(new_record.id, def);
     },
     /**
      * Creates a new group from a name (performs a name_create).
@@ -95,49 +93,7 @@ var KanbanModel = BasicModel.extend({
             });
     },
     /**
-     * Creates a new record from the given value, and add it to the given group.
-     *
-     * @param {string} groupID
-     * @param {Object} values
-     * @returns {Deferred} resolved with the local id of the created record
-     */
-    createRecordInGroup: function (groupID, values) {
-        var self = this;
-        var group = this.localData[groupID];
-        var context = this._getContext(group);
-        var parent = this.localData[group.parentID];
-        var groupedBy = parent.groupedBy;
-        context['default_' + groupedBy] = viewUtils.getGroupValue(group, groupedBy);
-        var def;
-        if (Object.keys(values).length === 1 && 'display_name' in values) {
-            // only 'display_name is given, perform a 'name_create'
-            def = this._rpc({
-                    model: parent.model,
-                    method: 'name_create',
-                    args: [values.display_name],
-                    context: context,
-                }).then(function (records) {
-                    return records[0];
-                });
-        } else {
-            // other fields are specified, perform a classical 'create'
-            def = this._rpc({
-                model: parent.model,
-                method: 'create',
-                args: [values],
-                context: context,
-            });
-        }
-        return def.then(function (resID) {
-            return self.addRecordToGroup(group.id, resID);
-        });
-    },
-    /**
-     * Add the following (kanban specific) keys when performing a `get`:
-     *
-     * - tooltipData
-     * - progressBarValues
-     * - isGroupedByM2ONoColumn
+     * Add the key `tooltipData` (kanban specific) when performing a `geŧ`.
      *
      * @override
      * @see _readTooltipFields
@@ -146,19 +102,11 @@ var KanbanModel = BasicModel.extend({
     get: function () {
         var result = this._super.apply(this, arguments);
         var dp = result && this.localData[result.id];
-        if (dp) {
-            if (dp.tooltipData) {
-                result.tooltipData = $.extend(true, {}, dp.tooltipData);
-            }
-            if (dp.progressBarValues) {
-                result.progressBarValues = $.extend(true, {}, dp.progressBarValues);
-            }
-            if (dp.fields[dp.groupedBy[0]]) {
-                var groupedByM2O = dp.fields[dp.groupedBy[0]].type === 'many2one';
-                result.isGroupedByM2ONoColumn = !dp.data.length && groupedByM2O;
-            } else {
-                result.isGroupedByM2ONoColumn = false;
-            }
+        if (dp && dp.tooltipData) {
+            result.tooltipData = $.extend(true, {}, dp.tooltipData);
+        }
+        if (dp && dp.progressBarValues) {
+            result.progressBarValues = $.extend(true, {}, dp.progressBarValues);
         }
         return result;
     },
@@ -305,7 +253,7 @@ var KanbanModel = BasicModel.extend({
      * @override
      */
     _load: function (dataPoint, options) {
-        if (dataPoint.groupedBy.length && dataPoint.progressBar) {
+        if (dataPoint.progressBar) {
             return this._readProgressBarGroup(dataPoint, options);
         }
         return this._super.apply(this, arguments);

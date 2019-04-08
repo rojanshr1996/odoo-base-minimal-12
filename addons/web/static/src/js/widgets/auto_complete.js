@@ -216,8 +216,5 @@ return Widget.extend({
     is_expandable: function () {
         return !!this.$('.o-selection-focus .o-expand').length;
     },
-    is_expanded: function() {
-        return this.$el[0].style.display === "block";
-    }
 });
 });

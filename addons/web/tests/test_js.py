@@ -6,9 +6,10 @@ import odoo.tests
 
 RE_ONLY = re.compile('QUnit\.only\(')
 
-
-@odoo.tests.tagged('post_install', '-at_install')
 class WebSuite(odoo.tests.HttpCase):
+
+    post_install = True
+    at_install = False
 
     def test_01_js(self):
         # webclient desktop test suite

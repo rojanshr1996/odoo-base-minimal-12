@@ -4,6 +4,7 @@ odoo.define('web.field_utils_tests', function (require) {
 var core = require('web.core');
 var session = require('web.session');
 var fieldUtils = require('web.field_utils');
+var testUtils = require('web.test_utils');
 
 QUnit.module('fields', {}, function () {
 
@@ -132,37 +133,7 @@ QUnit.test('format binary', function (assert) {
     // base64 estimated size (bytes) = value.length / 1.37 (http://en.wikipedia.org/wiki/Base64#MIME)
     // Here: 4 / 1.37 = 2.91970800 => 2.92 (rounded 2 decimals by utils.human_size)
     assert.strictEqual(fieldUtils.format.binary('Cg=='), '2.92 Bytes');
-});
 
-QUnit.test('format percentage', function (assert) {
-    assert.expect(11);
-
-    var originalParameters = _.clone(core._t.database.parameters);
-
-    assert.strictEqual(fieldUtils.format.percentage(0), '0%');
-    assert.strictEqual(fieldUtils.format.percentage(0.5), '50%');
-    assert.strictEqual(fieldUtils.format.percentage(1), '100%');
-
-    assert.strictEqual(fieldUtils.format.percentage(-0.2), '-20%');
-    assert.strictEqual(fieldUtils.format.percentage(2.5), '250%');
-
-    assert.strictEqual(fieldUtils.format.percentage(0.125), '12.5%');
-    assert.strictEqual(fieldUtils.format.percentage(0.666666), '66.67%');
-
-    assert.strictEqual(fieldUtils.format.percentage(false), '0%');
-    assert.strictEqual(fieldUtils.format.percentage(50, null,
-        {humanReadable: function (val) {return true;}}), '5k%'
-    );
-
-    _.extend(core._t.database.parameters, {
-        grouping: [3, 0],
-        decimal_point: ',',
-        thousands_sep: '.'
-    });
-    assert.strictEqual(fieldUtils.format.percentage(0.125), '12,5%');
-    assert.strictEqual(fieldUtils.format.percentage(0.666666), '66,67%');
-
-    core._t.database.parameters = originalParameters;
 });
 
 QUnit.test('parse float', function(assert) {
@@ -272,32 +243,5 @@ QUnit.test('parse monetary', function(assert) {
 
     session.currencies = originalCurrencies;
 });
-
-QUnit.test('parse percentage', function(assert) {
-    assert.expect(9);
-
-    var originalParameters = _.clone(core._t.database.parameters);
-
-    assert.strictEqual(fieldUtils.parse.percentage(""), 0);
-    assert.strictEqual(fieldUtils.parse.percentage("0"), 0);
-    assert.strictEqual(fieldUtils.parse.percentage("0%"), 0);
-    assert.strictEqual(fieldUtils.parse.percentage("0.02"), 0.02);
-    assert.strictEqual(fieldUtils.parse.percentage("1"), 1);
-    assert.strictEqual(fieldUtils.parse.percentage("2%"), 0.02);
-    assert.strictEqual(fieldUtils.parse.percentage("100%"), 1);
-
-    _.extend(core._t.database.parameters, {
-        grouping: [3, 0],
-        decimal_point: ',',
-        thousands_sep: '.'
-    });
-
-    assert.strictEqual(fieldUtils.parse.percentage("0,04"), 0.04);
-    assert.strictEqual(fieldUtils.parse.percentage("6,02%"), 0.0602);
-
-    core._t.database.parameters = originalParameters;
-
-})
-
 });
 });

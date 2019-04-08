@@ -38,10 +38,6 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
         FieldManagerMixin.init.call(this, this.model);
         this.handle = params.initialState.id;
         this.mode = params.mode || 'readonly';
-        // savingDef is used to ensure that we always wait for pending save
-        // operations to complete before checking if there are changes to
-        // discard when discardChanges is called
-        this.savingDef = $.when();
     },
     /**
      * @override
@@ -72,7 +68,7 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
      *          rejected otherwise
      */
     canBeDiscarded: function (recordID) {
-        if (!this.isDirty(recordID)) {
+        if (!this.model.isDirty(recordID || this.handle)) {
             return $.when(false);
         }
 
@@ -106,15 +102,14 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
         return true;
     },
     /**
-     * Waits for the mutex to be unlocked and for changes to be saved, then
-     * calls _.discardChanges.
+     * Waits for the mutex to be unlocked and then calls _.discardChanges.
      * This ensures that the confirm dialog isn't displayed directly if there is
      * a pending 'write' rpc.
      *
      * @see _.discardChanges
      */
     discardChanges: function (recordID, options) {
-        return $.when(this.mutex.getUnlockedDef(), this.savingDef)
+        return this.mutex.exec(function () {})
             .then(this._discardChanges.bind(this, recordID || this.handle, options));
     },
     /**
@@ -126,21 +121,6 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
         return [];
     },
     /**
-     * Gives the focus to the renderer
-     */
-    giveFocus:function() {
-        this.renderer.giveFocus();
-    },
-    /**
-     * Returns true iff the given recordID (or the main recordID) is dirty.
-     *
-     * @param {string} [recordID] - default to main recordID
-     * @returns {boolean}
-     */
-    isDirty: function (recordID) {
-        return this.model.isDirty(recordID || this.handle);
-    },
-    /**
      * @override
      */
     renderPager: function ($node, options) {
@@ -150,13 +130,12 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
         this.pager.on('pager_changed', this, function (newState) {
             var self = this;
             this.pager.disable();
-            data = this.model.get(this.handle, {raw: true});
             var limitChanged = (data.limit !== newState.limit);
             this.reload({limit: newState.limit, offset: newState.current_min - 1})
                 .then(function () {
                     // Reset the scroll position to the top on page changed only
                     if (!limitChanged) {
-                        self.trigger_up('scrollTo', {top: 0});
+                        self.trigger_up('scrollTo', {offset: 0});
                     }
                 })
                 .then(this.pager.enable.bind(this.pager));
@@ -178,22 +157,18 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
         // may have to validate them before notifying them, so we ask them to
         // commit their current value before saving. This has to be done outside
         // of the mutex protection of saving because commitChanges will trigger
-        // changes and these are also protected. However, we must wait for the
-        // mutex to be idle to ensure that onchange RPCs returned before asking
-        // field widgets to commit their value (and validate it, for instance
-        // for one2many with required fields). So the actual saving has to be
+        // changes and these are also protected. So the actual saving has to be
         // done after these changes. Also the commitChanges operation might not
         // be synchronous for other reason (e.g. the x2m fields will ask the
         // user if some discarding has to be made). This operation must also be
         // mutex-protected as commitChanges function of x2m has to be aware of
         // all final changes made to a row.
         var self = this;
-        this.savingDef = this.mutex.getUnlockedDef().then(function () {
-            return self.renderer.commitChanges(recordID || self.handle).then(function () {
+        return this.mutex
+            .exec(this.renderer.commitChanges.bind(this.renderer, recordID || this.handle))
+            .then(function () {
                 return self.mutex.exec(self._saveRecord.bind(self, recordID, options));
             });
-        });
-        return this.savingDef;
     },
     /**
      * @override
@@ -225,7 +200,7 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
     _abandonRecord: function (recordID) {
         recordID = recordID || this.handle;
         if (recordID === this.handle) {
-            this.trigger_up('history_back');
+            this.trigger_up('switch_to_previous_view');
         } else {
             this.model.removeLine(recordID);
         }
@@ -269,11 +244,17 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
                 model: record.model,
                 resIDs: record.res_ids,
             },
-            on_success: def.resolve.bind(def),
-            on_fail: function () {
-                self.update({}, {reload: false}).always(def.reject.bind(def));
+            on_closed: function (reason) {
+                if (!_.isObject(reason)) {
+                    reload(reason);
+                }
             },
-            on_closed: reload,
+            on_fail: function (reason) {
+                reload().always(function() {
+                    def.reject(reason);
+                });
+            },
+            on_success: def.resolve.bind(def),
         });
         return this.alive(def);
     },
@@ -339,13 +320,13 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
      * @param {Object} [options]
      * @param {boolean} [options.readonlyIfRealDiscard=false]
      *        After discarding record changes, the usual option is to make the
-     *        record readonly. However, the action manager calls this function
+     *        record readonly. However, the view manager calls this function
      *        at inappropriate times in the current code and in that case, we
      *        don't want to go back to readonly if there is nothing to discard
      *        (e.g. when switching record in edit mode in form view, we expect
      *        the new record to be in edit mode too, but the view manager calls
      *        this function as the URL changes...) @todo get rid of this when
-     *        the webclient/action_manager's hashchange mechanism is improved.
+     *        the view manager is improved.
      * @returns {Deferred}
      */
     _discardChanges: function (recordID, options) {
@@ -493,7 +474,7 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
             var sidebarEnv = this._getSidebarEnv();
             this.sidebar.updateEnv(sidebarEnv);
         }
-        this.trigger_up('env_updated', {controllerID: this.controllerID, env: env});
+        this.trigger_up('env_updated', env);
     },
     /**
      * Helper method, to make sure the information displayed by the pager is up
@@ -611,7 +592,6 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
      */
     _onTranslate: function (event) {
         event.stopPropagation();
-        var self = this;
         var record = this.model.get(event.data.id, {raw: true});
         this._rpc({
             route: '/web/dataset/call_button',
@@ -620,16 +600,7 @@ var BasicController = AbstractController.extend(FieldManagerMixin, {
                 method: 'translate_fields',
                 args: [record.model, record.res_id, event.data.fieldName, record.getContext()],
             }
-        }).then(function (result) {
-            self.do_action(result, {
-                on_reverse_breadcrumb: function () {
-                    if (!_.isEmpty(self.renderer.alertFields)) {
-                        self.renderer.displayTranslationAlert();
-                    }
-                    return false;
-                },
-            });
-        });
+        }).then(this.do_action.bind(this));
     },
 });
 

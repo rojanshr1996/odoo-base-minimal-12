@@ -25,7 +25,6 @@ var Registry = Class.extend({
      */
     init: function (mapping) {
         this.map = Object.create(mapping || null);
-        this.listeners = []; // listening callbacks on newly added items.
     },
 
     //--------------------------------------------------------------------------
@@ -35,17 +34,12 @@ var Registry = Class.extend({
     /**
      * Add a key (and a value) to the registry.
      *
-     * Notify the listeners on newly added item in the registry.
-     *
      * @param {string} key
      * @param {any} value
      * @returns {Registry} can be used to chain add calls.
      */
     add: function (key, value) {
         this.map[key] = value;
-        _.each(this.listeners, function (callback) {
-            callback(key, value);
-        });
         return this;
     },
     /**
@@ -94,14 +88,6 @@ var Registry = Class.extend({
             }
         }
         return null;
-    },
-    /**
-     * Register a callback to execute when items are added to the registry.
-     *
-     * @param {function} callback function with parameters (key, value).
-     */
-    onAdd: function (callback) {
-        this.listeners.push(callback);
     },
 });
 

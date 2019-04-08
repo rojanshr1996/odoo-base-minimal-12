@@ -9,7 +9,8 @@ import odoo.tests
 _logger = logging.getLogger(__name__)
 
 
-@odoo.tests.tagged('post_install', '-at_install')
+@odoo.tests.common.at_install(False)
+@odoo.tests.common.post_install(True)
 class TestReports(odoo.tests.TransactionCase):
     def test_reports(self):
         domain = [('report_type', 'like', 'qweb')]

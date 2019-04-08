@@ -284,7 +284,7 @@
                     log_when_loaded();
                 }
             });
-        }, 6000);
+        }, 4000);
     };
     $(log_when_loaded);
 

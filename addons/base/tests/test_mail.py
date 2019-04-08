@@ -3,12 +3,10 @@
 
 import unittest
 
-from odoo.tests.common import tagged
 from odoo.tools import html_sanitize, append_content_to_html, plaintext2html, email_split, misc
 from . import test_mail_examples
 
 
-@tagged('standard', 'at_install')
 class TestSanitizer(unittest.TestCase):
     """ Test the html sanitizer that filters html to remove unwanted attributes """
 
@@ -290,7 +288,6 @@ class TestSanitizer(unittest.TestCase):
     #         self.assertNotIn(ext, new_html)
 
 
-@tagged('standard', 'at_install')
 class TestHtmlTools(unittest.TestCase):
     """ Test some of our generic utility functions about html """
 
@@ -318,7 +315,6 @@ class TestHtmlTools(unittest.TestCase):
             self.assertEqual(append_content_to_html(html, content, plaintext_flag, preserve_flag, container_tag), expected, 'append_content_to_html is broken')
 
 
-@tagged('standard', 'at_install')
 class TestEmailTools(unittest.TestCase):
     """ Test some of our generic utility functions for emails """
 

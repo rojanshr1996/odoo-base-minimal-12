@@ -39,7 +39,7 @@ var QuickCreate = Dialog.extend({
 
         var self = this;
         this._super(parent, {
-            title: options.title,
+            title: this._getTitle(),
             size: 'small',
             buttons: this._buttons ? [
                 {text: _t("Create"), classes: 'btn-primary', click: function () {
@@ -68,9 +68,22 @@ var QuickCreate = Dialog.extend({
     },
 
     //--------------------------------------------------------------------------
-    // Private
+    // Public
     //--------------------------------------------------------------------------
 
+    /**
+     * @returns {string}
+     */
+    _getTitle: function () {
+        var parent = this.getParent();
+        if (_.isUndefined(parent)) {
+            return _t("Create");
+        }
+        var title = (_.isUndefined(parent.field_widget)) ?
+                (parent.title || parent.string || parent.name) :
+                (parent.field_widget.string || parent.field_widget.name || '');
+        return _t("Create: ") + title;
+    },
     /**
      * Gathers data from the quick create dialog a launch quick_create(data) method
      */
@@ -80,11 +93,6 @@ var QuickCreate = Dialog.extend({
         dataCalendar.title = val;
         return (val)? this.trigger_up('quickCreate', {data: dataCalendar, options: this.options}) : false;
     },
-
-    //--------------------------------------------------------------------------
-    // Handlers
-    //--------------------------------------------------------------------------
-
     /**
      * @private
      * @param {keyEvent} event

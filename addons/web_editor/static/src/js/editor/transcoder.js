@@ -1,7 +1,7 @@
 odoo.define('web_editor.transcoder', function (require) {
 'use strict';
 
-var base = require('web_editor.base');
+var widget = require('web_editor.widget');
 
 var rulesCache = [];
 
@@ -37,6 +37,7 @@ function getMatchedCSSRules(a) {
                             selectorText.indexOf(':active') === -1 &&
                             selectorText.indexOf(':link') === -1 &&
                             selectorText.indexOf('::') === -1 &&
+                            selectorText.indexOf('"') === -1 &&
                             selectorText.indexOf("'") === -1) {
                         var st = selectorText.split(/\s*,\s*/);
                         for (k = 0 ; k < st.length ; k++) {
@@ -190,11 +191,11 @@ function fontToImg($editable) {
     $editable.find('.fa').each(function () {
         var $font = $(this);
         var icon, content;
-        _.find(base.fontIcons, function (font) {
-            return _.find(base.getCssSelectors(font.parser), function (data) {
-                if ($font.is(data.selector.replace(/::?before/g, ''))) {
-                    icon = data.names[0].split('-').shift();
-                    content = data.css.match(/content:\s*['"]?(.)['"]?/)[1];
+        _.find(widget.fontIcons, function (font) {
+            return _.find(widget.getCssSelectors(font.parser), function (css) {
+                if ($font.is(css[0].replace(/::?before/g, ''))) {
+                    icon = css[2].split('-').shift();
+                    content = css[1].match(/content:\s*['"]?(.)['"]?/)[1];
                     return true;
                 }
             });
@@ -310,7 +311,7 @@ function classToStyle($editable) {
                 $(node).remove();
             }
         }
-        else if (node.nodeName === 'IMG' && $target.is('.mx-auto.d-block')) {
+        else if (node.nodeName === 'IMG' && $target.hasClass('center-block')) {
             $target.wrap('<p class="o_outlook_hack" style="text-align:center;margin:0"/>');
         }
     });

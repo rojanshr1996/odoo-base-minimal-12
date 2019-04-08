@@ -10,27 +10,24 @@ odoo.define('web.CalendarController', function (require) {
  */
 
 var AbstractController = require('web.AbstractController');
-var config = require('web.config');
-var core = require('web.core');
-var Dialog = require('web.Dialog');
-var dialogs = require('web.view_dialogs');
 var QuickCreate = require('web.CalendarQuickCreate');
+var dialogs = require('web.view_dialogs');
+var Dialog = require('web.Dialog');
+var core = require('web.core');
 
 var _t = core._t;
 var QWeb = core.qweb;
 
 var CalendarController = AbstractController.extend({
     custom_events: _.extend({}, AbstractController.prototype.custom_events, {
-        changeDate: '_onChangeDate',
-        changeFilter: '_onChangeFilter',
-        dropRecord: '_onDropRecord',
-        next: '_onNext',
+        quickCreate: '_onQuickCreate',
         openCreate: '_onOpenCreate',
         openEvent: '_onOpenEvent',
-        prev: '_onPrev',
-        quickCreate: '_onQuickCreate',
-        toggleFullWidth: '_onToggleFullWidth',
+        dropRecord: '_onDropRecord',
         updateRecord: '_onUpdateRecord',
+        changeDate: '_onChangeDate',
+        changeFilter: '_onChangeFilter',
+        toggleFullWidth: '_onToggleFullWidth',
         viewUpdated: '_onViewUpdated',
     }),
     /**
@@ -54,29 +51,11 @@ var CalendarController = AbstractController.extend({
         // The quickCreating attribute ensures that we don't do several create
         this.quickCreating = false;
     },
-    /**
-     * Overrides to unbind handler on the control panel mobile 'Today' button.
-     *
-     * @override
-     */
-    destroy: function () {
-        this._super.apply(this, arguments);
-        if (this.$todayButton) {
-            this.$todayButton.off();
-        }
-    },
 
     //--------------------------------------------------------------------------
     // Public
     //--------------------------------------------------------------------------
 
-    /**
-     * @override
-     * @returns {string}
-     */
-    getTitle: function () {
-        return this.get('title');
-    },
     /**
      * Render the buttons according to the CalendarView.buttons template and
      * add listeners on it. Set this.$buttons with the produced jQuery element
@@ -87,16 +66,15 @@ var CalendarController = AbstractController.extend({
      */
     renderButtons: function ($node) {
         var self = this;
-        this.$buttons = $(QWeb.render('CalendarView.buttons', {
-            isMobile: config.device.isMobile,
-        }));
+        this.$buttons = $(QWeb.render("CalendarView.buttons", {'widget': this}));
         this.$buttons.on('click', 'button.o_calendar_button_new', function () {
             self.trigger_up('switch_view', {view_type: 'form'});
         });
 
         _.each(['prev', 'today', 'next'], function (action) {
             self.$buttons.on('click', '.o_calendar_button_' + action, function () {
-                self._move(action);
+                self.model[action]();
+                self.reload();
             });
         });
         _.each(['day', 'week', 'month'], function (scale) {
@@ -114,43 +92,12 @@ var CalendarController = AbstractController.extend({
             this.$('.o_calendar_buttons').replaceWith(this.$buttons);
         }
     },
-    /**
-     * In mobile, we want to display a special 'Today' button on the bottom
-     * right corner of the control panel. This is the pager area, and as there
-     * is no pager in Calendar views, we fool the system by defining a fake
-     * pager (which is actually our button) such that it will be inserted in the
-     * desired place.
-     *
-     * @todo get rid of this hack once the ControlPanel layout will be reworked
-     *
-     * @param {jQueryElement} $node the button should be appended to this
-     *   element to be displayed in the bottom right corner of the control panel
-     */
-    renderPager: function ($node) {
-        if (config.device.isMobile) {
-            this.$todayButton = $(QWeb.render('CalendarView.TodayButtonMobile'));
-            this.$todayButton.on('click', this._move.bind(this, 'today'));
-            $node.append(this.$todayButton);
-        }
-    },
 
     //--------------------------------------------------------------------------
     // Private
     //--------------------------------------------------------------------------
 
     /**
-     * Move to the requested direction and reload the view
-     *
-     * @private
-     * @param {string} to either 'prev', 'next' or 'today'
-     * @returns {Deferred}
-     */
-    _move: function (to) {
-        this.model[to]();
-        return this.reload();
-    },
-    /**
-     * @private
      * @param {Object} record
      * @param {integer} record.id
      * @returns {Deferred}
@@ -164,7 +111,6 @@ var CalendarController = AbstractController.extend({
     //--------------------------------------------------------------------------
 
     /**
-     * @private
      * @param {OdooEvent} event
      */
     _onChangeDate: function (event) {
@@ -187,7 +133,6 @@ var CalendarController = AbstractController.extend({
         this.reload();
     },
     /**
-     * @private
      * @param {OdooEvent} event
      */
     _onChangeFilter: function (event) {
@@ -196,22 +141,42 @@ var CalendarController = AbstractController.extend({
         }
     },
     /**
-     * @private
      * @param {OdooEvent} event
      */
     _onDropRecord: function (event) {
         this._updateRecord(event.data);
     },
     /**
+     * Handles saving data coming from quick create box
+     *
      * @private
      * @param {OdooEvent} event
      */
-    _onNext: function (event) {
-        event.stopPropagation();
-        this._move('next');
+    _onQuickCreate: function (event) {
+        var self = this;
+        if (this.quickCreating) {
+            return;
+        }
+        this.quickCreating = true;
+        this.model.createRecord(event)
+            .then(function () {
+                self.quick.destroy();
+                self.quick = null;
+                self.reload();
+            })
+            .fail(function (error, errorEvent) {
+                // This will occurs if there are some more fields required
+                // Preventdefaulting the error event will prevent the traceback window
+                errorEvent.preventDefault();
+                event.data.options.disableQuickCreate = true;
+                event.data.data.on_save = self.quick.destroy.bind(self.quick);
+                self._onOpenCreate(event.data);
+            })
+            .always(function () {
+                self.quickCreating = false;
+            });
     },
     /**
-     * @private
      * @param {OdooEvent} event
      */
     _onOpenCreate: function (event) {
@@ -240,22 +205,17 @@ var CalendarController = AbstractController.extend({
             }
         }
 
-        var options = _.extend({}, this.options, event.options, {
-            context: context,
-            title: _.str.sprintf(_t('Create: %s'), (this.displayName || this.renderer.arch.attrs.string))
-        });
+        var options = _.extend({}, this.options, event.options, {context: context});
 
         if (this.quick != null) {
             this.quick.destroy();
             this.quick = null;
         }
 
-        if (!options.disableQuickCreate && !event.data.disableQuickCreate && this.quickAddPop) {
+        if(!options.disableQuickCreate && !event.data.disableQuickCreate && this.quickAddPop) {
             this.quick = new QuickCreate(this, true, options, data, event.data);
             this.quick.open();
-            this.quick.opened(function () {
-                self.quick.focus();
-            });
+            this.quick.focus();
             return;
         }
 
@@ -287,7 +247,6 @@ var CalendarController = AbstractController.extend({
         }
     },
     /**
-     * @private
      * @param {OdooEvent} event
      */
     _onOpenEvent: function (event) {
@@ -363,55 +322,13 @@ var CalendarController = AbstractController.extend({
         open_dialog(true);
     },
     /**
-     * @private
-     * @param {OdooEvent} event
-     */
-    _onPrev: function () {
-        event.stopPropagation();
-        this._move('prev');
-    },
-
-    /**
-     * Handles saving data coming from quick create box
-     *
-     * @private
-     * @param {OdooEvent} event
-     */
-    _onQuickCreate: function (event) {
-        var self = this;
-        if (this.quickCreating) {
-            return;
-        }
-        this.quickCreating = true;
-        this.model.createRecord(event)
-            .then(function () {
-                self.quick.destroy();
-                self.quick = null;
-                self.reload();
-            })
-            .fail(function (error, errorEvent) {
-                // This will occurs if there are some more fields required
-                // Preventdefaulting the error event will prevent the traceback window
-                errorEvent.preventDefault();
-                event.data.options.disableQuickCreate = true;
-                event.data.data.on_save = self.quick.destroy.bind(self.quick);
-                self._onOpenCreate(event.data);
-            })
-            .always(function () {
-                self.quickCreating = false;
-            });
-    },
-    /**
      * Called when we want to open or close the sidebar.
-     *
-     * @private
      */
     _onToggleFullWidth: function () {
         this.model.toggleFullWidth();
         this.reload();
     },
     /**
-     * @private
      * @param {OdooEvent} event
      */
     _onUpdateRecord: function (event) {
@@ -421,7 +338,6 @@ var CalendarController = AbstractController.extend({
      * The internal state of the calendar (mode, period displayed) has changed,
      * so update the control panel buttons and breadcrumbs accordingly.
      *
-     * @private
      * @param {OdooEvent} event
      */
     _onViewUpdated: function (event) {
@@ -430,7 +346,8 @@ var CalendarController = AbstractController.extend({
             this.$buttons.find('.active').removeClass('active');
             this.$buttons.find('.o_calendar_button_' + this.mode).addClass('active');
         }
-        this.set({title: this.displayName + ' (' + event.data.title + ')'});
+        var subtitle = (this.mode === 'week' ? _t('Week ') : '') + event.data.title;
+        this.set({title: this.displayName + ' (' + subtitle + ')'});
     },
 });
 

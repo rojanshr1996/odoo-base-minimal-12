@@ -2,16 +2,15 @@ odoo.define('web.CalendarRenderer', function (require) {
 "use strict";
 
 var AbstractRenderer = require('web.AbstractRenderer');
-var config = require('web.config');
-var core = require('web.core');
-var Dialog = require('web.Dialog');
-var field_utils = require('web.field_utils');
-var FieldManagerMixin = require('web.FieldManagerMixin');
-var QWeb = require('web.QWeb');
 var relational_fields = require('web.relational_fields');
+var FieldManagerMixin = require('web.FieldManagerMixin');
+var field_utils = require('web.field_utils');
 var session = require('web.session');
-var utils = require('web.utils');
+var Dialog = require('web.Dialog');
 var Widget = require('web.Widget');
+var utils = require('web.utils');
+var core = require('web.core');
+var QWeb = require('web.QWeb');
 
 var _t = core._t;
 var qweb = core.qweb;
@@ -59,9 +58,6 @@ var SidebarFilter = Widget.extend(FieldManagerMixin, {
         this.label = options.label;
         this.getColor = options.getColor;
     },
-    /**
-     * @override
-     */
     willStart: function () {
         var self = this;
         var defs = [this._super.apply(this, arguments)];
@@ -77,10 +73,7 @@ var SidebarFilter = Widget.extend(FieldManagerMixin, {
                     self.model.get(recordID),
                     {
                         mode: 'edit',
-                        attrs: {
-                            placeholder: _.str.sprintf(_t("Add %s"), self.title),
-                            can_create: false
-                        },
+                        attrs: {can_create: false},
                     });
             });
             defs.push(def);
@@ -88,9 +81,6 @@ var SidebarFilter = Widget.extend(FieldManagerMixin, {
         return $.when.apply($, defs);
 
     },
-    /**
-     * @override
-     */
     start: function () {
         this._super();
         if (this.many2one) {
@@ -98,7 +88,7 @@ var SidebarFilter = Widget.extend(FieldManagerMixin, {
             this.many2one.filter_ids = _.without(_.pluck(this.filters, 'value'), 'all');
         }
         this.$el.on('click', '.o_remove', this._onFilterRemove.bind(this));
-        this.$el.on('click', '.custom-checkbox input', this._onFilterActive.bind(this));
+        this.$el.on('click', '.o_checkbox input', this._onFilterActive.bind(this));
     },
 
     //--------------------------------------------------------------------------
@@ -106,7 +96,6 @@ var SidebarFilter = Widget.extend(FieldManagerMixin, {
     //--------------------------------------------------------------------------
 
     /**
-     * @private
      * @param {OdooEvent} event
      */
     _onFieldChanged: function (event) {
@@ -126,10 +115,6 @@ var SidebarFilter = Widget.extend(FieldManagerMixin, {
                 });
             });
     },
-    /**
-     * @private
-     * @param {MouseEvent} e
-     */
     _onFilterActive: function (e) {
         var $input = $(e.currentTarget);
         this.trigger_up('changeFilter', {
@@ -139,7 +124,6 @@ var SidebarFilter = Widget.extend(FieldManagerMixin, {
         });
     },
     /**
-     * @private
      * @param {MouseEvent} e
      */
     _onFilterRemove: function (e) {
@@ -196,9 +180,6 @@ return AbstractRenderer.extend({
     start: function () {
         this._initSidebar();
         this._initCalendar();
-        if (config.device.isMobile) {
-            this._bindSwipe();
-        }
         return this._super();
     },
     /**
@@ -295,41 +276,18 @@ return AbstractRenderer.extend({
     //--------------------------------------------------------------------------
 
     /**
-     * @private
-     * Bind handlers to enable swipe navigation
-     *
-     * @private
-     */
-    _bindSwipe: function () {
-        var self = this;
-        var touchStartX;
-        var touchEndX;
-        this.$calendar.on('touchstart', function (event) {
-            touchStartX = event.originalEvent.touches[0].pageX;
-        });
-        this.$calendar.on('touchend', function (event) {
-            touchEndX = event.originalEvent.changedTouches[0].pageX;
-            if (touchStartX - touchEndX > 100) {
-                self.trigger_up('next');
-            } else if (touchStartX - touchEndX < -100) {
-                self.trigger_up('prev');
-            }
-        });
-    },
-    /**
      * @param {any} event
      * @returns {string} the html for the rendered event
      */
     _eventRender: function (event) {
         var qweb_context = {
             event: event,
-            fields: this.state.fields,
-            format: this._format.bind(this),
-            isMobile: config.device.isMobile,
-            read_only_mode: this.read_only_mode,
             record: event.record,
-            user_context: session.user_context,
             widget: this,
+            read_only_mode: this.read_only_mode,
+            user_context: session.user_context,
+            format: this._format.bind(this),
+            fields: this.state.fields
         };
         this.qweb_context = qweb_context;
         if (_.isEmpty(qweb_context.record)) {
@@ -339,7 +297,6 @@ return AbstractRenderer.extend({
         }
     },
     /**
-     * @private
      * @param {any} record
      * @param {any} fieldName
      * @returns {string}
@@ -354,8 +311,6 @@ return AbstractRenderer.extend({
     },
     /**
      * Initialize the main calendar
-     *
-     * @private
      */
     _initCalendar: function () {
         var self = this;
@@ -406,22 +361,21 @@ return AbstractRenderer.extend({
             viewRender: function (view) {
                 // compute mode from view.name which is either 'month', 'agendaWeek' or 'agendaDay'
                 var mode = view.name === 'month' ? 'month' : (view.name === 'agendaWeek' ? 'week' : 'day');
+                // compute title: in week mode, display the week number
+                var title = mode === 'week' ? view.intervalStart.week() : view.title;
                 self.trigger_up('viewUpdated', {
                     mode: mode,
-                    title: view.title,
+                    title: title,
                 });
             },
             height: 'parent',
             unselectAuto: false,
-            isRTL: _t.database.parameters.direction === "rtl",
         });
 
         this.$calendar.fullCalendar(fc_options);
     },
     /**
      * Initialize the mini calendar in the sidebar
-     *
-     * @private
      */
     _initCalendarMini: function () {
         var self = this;
@@ -439,8 +393,6 @@ return AbstractRenderer.extend({
     },
     /**
      * Initialize the sidebar
-     *
-     * @private
      */
     _initSidebar: function () {
         this.$sidebar = this.$('.o_calendar_sidebar');
@@ -451,7 +403,6 @@ return AbstractRenderer.extend({
      * Render the calendar view, this is the main entry point.
      *
      * @override method from AbstractRenderer
-     * @private
      * @returns {Deferred}
      */
     _render: function () {
@@ -510,8 +461,6 @@ return AbstractRenderer.extend({
     },
     /**
      * Render all events
-     *
-     * @private
      */
     _renderEvents: function () {
         this.$calendar.fullCalendar('removeEvents');
@@ -519,8 +468,6 @@ return AbstractRenderer.extend({
     },
     /**
      * Render all filters
-     *
-     * @private
      */
     _renderFilters: function () {
         var self = this;
@@ -548,8 +495,6 @@ return AbstractRenderer.extend({
 
     /**
      * Toggle the sidebar
-     *
-     * @private
      */
     _onToggleSidebar: function () {
         this.trigger_up('toggleFullWidth');

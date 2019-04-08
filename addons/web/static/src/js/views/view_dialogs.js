@@ -1,14 +1,13 @@
 odoo.define('web.view_dialogs', function (require) {
 "use strict";
 
-var config = require('web.config');
 var core = require('web.core');
 var data = require('web.data');
 var Dialog = require('web.Dialog');
 var dom = require('web.dom');
 var ListController = require('web.ListController');
 var ListView = require('web.ListView');
-var pyUtils = require('web.py_utils');
+var pyeval = require('web.pyeval');
 var SearchView = require('web.SearchView');
 var view_registry = require('web.view_registry');
 
@@ -36,7 +35,6 @@ var ViewDialog = Dialog.extend({
      */
     init: function (parent, options) {
         options = options || {};
-        options.fullscreen = config.device.isMobile;
         options.dialogClass = options.dialogClass || '' + ' o_act_window';
 
         this._super(parent, $.extend(true, {}, options));
@@ -83,15 +81,9 @@ var FormViewDialog = ViewDialog.extend({
      * @param {Object} [options.fields_view] optional form fields_view
      * @param {boolean} [options.readonly=false] only applicable when not in
      *   creation mode
-     * @param {boolean} [options.deletable=false] whether or not the record can
-     *   be deleted
-     * @param {boolean} [options.disable_multiple_selection=false] set to true
-     *   to remove the possibility to create several records in a row
      * @param {function} [options.on_saved] callback executed after saving a
      *   record.  It will be called with the record data, and a boolean which
      *   indicates if something was changed
-     * @param {function} [options.on_remove] callback executed when the user
-     *   clicks on the 'Remove' button
      * @param {BasicModel} [options.model] if given, it will be used instead of
      *  a new form view model
      * @param {string} [options.recordID] if given, the model has to be given as
@@ -101,27 +93,23 @@ var FormViewDialog = ViewDialog.extend({
      */
     init: function (parent, options) {
         var self = this;
-        options = options || {};
 
         this.res_id = options.res_id || null;
         this.on_saved = options.on_saved || (function () {});
-        this.on_remove = options.on_remove || (function () {});
         this.context = options.context;
         this.model = options.model;
         this.parentID = options.parentID;
         this.recordID = options.recordID;
         this.shouldSaveLocally = options.shouldSaveLocally;
-        this.readonly = options.readonly;
-        this.deletable = options.deletable;
-        this.disable_multiple_selection = options.disable_multiple_selection;
 
         var multi_select = !_.isNumber(options.res_id) && !options.disable_multiple_selection;
         var readonly = _.isNumber(options.res_id) && options.readonly;
 
-        if (!options.buttons) {
+        if (!options || !options.buttons) {
+            options = options || {};
             options.buttons = [{
                 text: (readonly ? _t("Close") : _t("Discard")),
-                classes: "btn-secondary o_form_button_cancel",
+                classes: "btn-default o_form_button_cancel",
                 close: true,
                 click: function () {
                     if (!readonly) {
@@ -134,7 +122,7 @@ var FormViewDialog = ViewDialog.extend({
 
             if (!readonly) {
                 options.buttons.unshift({
-                    text: (multi_select ? _t("Save & Close") : _t("Save")),
+                    text: _t("Save") + ((multi_select)? " " + _t(" & Close") : ""),
                     classes: "btn-primary",
                     click: function () {
                         this._save().then(self.close.bind(self));
@@ -148,15 +136,6 @@ var FormViewDialog = ViewDialog.extend({
                         click: function () {
                             this._save().then(self.form_view.createRecord.bind(self.form_view, self.parentID));
                         },
-                    });
-                }
-
-                var multi = options.disable_multiple_selection;
-                if (!multi && this.deletable) {
-                    options.buttons.push({
-                        text: _t("Remove"),
-                        classes: 'btn-secondary o_btn_remove',
-                        click: this._remove.bind(this),
                     });
                 }
             }
@@ -186,6 +165,9 @@ var FormViewDialog = ViewDialog.extend({
         }
 
         fields_view_def.then(function (viewInfo) {
+            if (self.recordID) {
+                self.model.addFieldsInfo(self.recordID, viewInfo);
+            }
             var refinedContext = _.pick(self.context, function (value, key) {
                 return key.indexOf('_view_ref') === -1;
             });
@@ -196,9 +178,8 @@ var FormViewDialog = ViewDialog.extend({
                 currentId: self.res_id || undefined,
                 index: 0,
                 mode: self.res_id && self.options.readonly ? 'readonly' : 'edit',
-                footerToButtons: true,
+                footer_to_buttons: true,
                 default_buttons: false,
-                withControlPanel: false,
                 model: self.model,
                 parentID: self.parentID,
                 recordID: self.recordID,
@@ -212,9 +193,9 @@ var FormViewDialog = ViewDialog.extend({
             }
             self.form_view.appendTo(fragment)
                 .then(function () {
+                    var $buttons = $('<div>');
+                    self.form_view.renderButtons($buttons);
                     self.opened().always(function () {
-                        var $buttons = $('<div>');
-                        self.form_view.renderButtons($buttons);
                         if ($buttons.children().length) {
                             self.$footer.empty().append($buttons.contents());
                         }
@@ -234,33 +215,13 @@ var FormViewDialog = ViewDialog.extend({
     // Private
     //--------------------------------------------------------------------------
 
-    /**
-     * @override
-     */
-    _focusOnClose: function() {
-        this.trigger_up('form_dialog_discarded');
-        return true;
-    },
-
-    /**
-     * @private
-     */
-    _remove: function () {
-        this.on_remove();
-        this.close();
-    },
-
-    /**
-     * @private
-     * @returns {Deferred}
-     */
     _save: function () {
         var self = this;
         return this.form_view.saveRecord(this.form_view.handle, {
-            stayInEdit: true,
-            reload: false,
-            savePoint: this.shouldSaveLocally,
-            viewType: 'form',
+                stayInEdit: true,
+                reload: false,
+                savePoint: this.shouldSaveLocally,
+                viewType: 'form',
         }).then(function (changedFields) {
             // record might have been changed by the save (e.g. if this was a new record, it has an
             // id now), so don't re-use the copy obtained before the save
@@ -300,7 +261,7 @@ var SelectCreateDialog = ViewDialog.extend({
             this.$footer.find(".o_select_button").prop('disabled', !event.data.selection.length);
         },
         search: function (event) {
-            event.stopPropagation(); // prevent this event from bubbling up to the action manager
+            event.stopPropagation(); // prevent this event from bubbling up to the view manager
             var d = event.data;
             var searchData = this._process_search_data(d.domains, d.contexts, d.groupbys);
             this.list_controller.reload(_.extend({offset: 0}, searchData));
@@ -331,7 +292,7 @@ var SelectCreateDialog = ViewDialog.extend({
         var user_context = this.getSession().user_context;
 
         var _super = this._super.bind(this);
-        var context = pyUtils.eval_domains_and_contexts({
+        var context = pyeval.eval_domains_and_contexts({
             domains: [],
             contexts: [user_context, this.context]
         }).context;
@@ -342,7 +303,7 @@ var SelectCreateDialog = ViewDialog.extend({
                 search_defaults[match[1]] = value_;
             }
         });
-        this.loadViews(this.dataset.model, this.dataset.get_context().eval(), [[false, 'list'], [false, 'search']], {})
+        this.loadViews(this.dataset.model, this.dataset.get_context(), [[false, 'list'], [false, 'search']], {})
             .then(this.setup.bind(this, search_defaults))
             .then(function (fragment) {
                 self.opened().then(function () {
@@ -398,7 +359,7 @@ var SelectCreateDialog = ViewDialog.extend({
             // Set the dialog's buttons
             self.__buttons = [{
                 text: _t("Cancel"),
-                classes: "btn-secondary o_form_button_cancel",
+                classes: "btn-default o_form_button_cancel",
                 close: true,
             }];
             if (!self.options.no_create) {
@@ -435,7 +396,7 @@ var SelectCreateDialog = ViewDialog.extend({
         });
     },
     _process_search_data: function (domains, contexts, groupbys) {
-        var results = pyUtils.eval_domains_and_contexts({
+        var results = pyeval.eval_domains_and_contexts({
             domains: [this.domain].concat(domains),
             contexts: [this.context].concat(contexts),
             group_by_seq: groupbys || [],
@@ -454,7 +415,7 @@ var SelectCreateDialog = ViewDialog.extend({
             on_saved: function (record) {
                 var values = [{
                     id: record.res_id,
-                    display_name: record.data.display_name || record.data.name,
+                    display_name: record.data.display_name,
                 }];
                 self.on_selected(values);
             },
@@ -462,13 +423,7 @@ var SelectCreateDialog = ViewDialog.extend({
         dialog.on('closed', this, this.close);
         return dialog;
     },
-    /**
-     * @override
-     */
-    _focusOnClose: function() {
-        this.trigger_up('form_dialog_discarded');
-        return true;
-    },
+
     //--------------------------------------------------------------------------
     // Handlers
     //--------------------------------------------------------------------------
@@ -483,9 +438,9 @@ var SelectCreateDialog = ViewDialog.extend({
      */
     _onGetControllerContext: function (ev) {
         ev.stopPropagation();
-        var context = this.list_controller && this.list_controller.getContext();
-        ev.data.callback(context || {});
-    }
+        var context = this.list_controller.getContext();
+        ev.data.callback(context);
+    },
 });
 
 return {

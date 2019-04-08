@@ -18,29 +18,40 @@ class Deploy(Command):
 
     def deploy_module(self, module_path, url, login, password, db='', force=False):
         url = url.rstrip('/')
+        csrf_token = self.authenticate(url, login, password, db)
         module_file = self.zip_module(module_path)
         try:
-            return self.login_upload_module(module_file, url, login, password, db, force=force)
+            return self.upload_module(url, module_file, force=force, csrf_token=csrf_token)
         finally:
             os.remove(module_file)
 
-    def login_upload_module(self, module_file, url, login, password, db, force=False):
+    def upload_module(self, server, module_file, force=False, csrf_token=None):
         print("Uploading module file...")
-        endpoint = url + '/base_import_module/login_upload'
-        post_data = {
-            'login': login,
-            'password': password,
-            'db': db,
-            'force': '1' if force else '',
-        }
-        with open(module_file, 'rb') as f:
-            res = self.session.post(endpoint, files={'mod_file': f}, data=post_data)
+        url = server + '/base_import_module/upload'
 
-        if res.status_code == 404:
-            raise Exception(
-                "The server '%s' does not have the 'base_import_module' installed or is not up-to-date." % url)
+        post_data = {'force': '1' if force else ''}
+        if csrf_token: post_data['csrf_token'] = csrf_token
+
+        with open(module_file, 'rb') as f:
+            res = self.session.post(url, files={'mod_file': f}, data=post_data)
         res.raise_for_status()
+
         return res.text
+
+    def authenticate(self, server, login, password, db=''):
+        print("Authenticating on server '%s' ..." % server)
+
+        # Fixate session with a given db if any
+        self.session.get(server + '/web/login', params=dict(db=db))
+
+        args = dict(login=login, password=password, db=db)
+        res = self.session.post(server + '/base_import_module/login', args)
+        if res.status_code == 404:
+            raise Exception("The server '%s' does not have the 'base_import_module' installed." % server)
+        elif res.status_code != 200:
+            raise Exception(res.text)
+
+        return res.headers.get('x-csrf-token')
 
     def zip_module(self, path):
         path = os.path.abspath(path)

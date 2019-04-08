@@ -82,7 +82,7 @@ translator.Class.include({
 
 //==============================================================================
 
-odoo.define('root.widget', function (require) {
+odoo.define('web_editor.IframeRoot.instance', function (require) {
 'use strict';
 
 require('web.dom_ready');

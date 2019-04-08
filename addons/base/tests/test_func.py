@@ -4,12 +4,10 @@
 import functools
 import unittest
 
-from odoo.tests.common import tagged
 from odoo.tools import frozendict, pycompat
 from odoo.tools.func import compose
 
 
-@tagged('standard', 'at_install')
 class TestCompose(unittest.TestCase):
     def test_basic(self):
         str_add = compose(str, lambda a, b: a + b)
@@ -25,7 +23,6 @@ class TestCompose(unittest.TestCase):
         self.assertEqual(mul(5, 42), u"210")
 
 
-@tagged('standard', 'at_install')
 class TestFrozendict(unittest.TestCase):
     def test_frozendict_immutable(self):
         """ Ensure that a frozendict is immutable. """

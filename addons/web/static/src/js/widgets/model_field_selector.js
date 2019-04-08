@@ -53,11 +53,7 @@ var ModelFieldSelector = Widget.extend({
      * @param {string} model - the model name (e.g. "res.partner")
      * @param {string[]} chain - list of the initial field chain parts
      * @param {Object} [options] - some key-value options
-     * @param {string} [options.order='string']
-     *                 an ordering key for displayed fields
      * @param {boolean} [options.readonly=true] - true if should be readonly
-     * @param {function} [options.filter]
-     *                 a function to filter the fetched fields
      * @param {Object} [options.filters]
      *                 some key-value options to filter the fetched fields
      * @param {boolean} [options.filters.searchable=true]
@@ -66,7 +62,7 @@ var ModelFieldSelector = Widget.extend({
      *                   the list of fields info to use when no relation has
      *                   been followed (null indicates the widget has to request
      *                   the fields itself)
-     * @param {boolean|function} [options.followRelations=true]
+     * @param {boolean} [options.followRelations=true]
      *                  true if can follow relation when building the chain
      * @param {boolean} [options.debugMode=false]
      *                  true if the widget is in debug mode, false otherwise
@@ -77,23 +73,15 @@ var ModelFieldSelector = Widget.extend({
         this.model = model;
         this.chain = chain;
         this.options = _.extend({
-            order: 'string',
             readonly: true,
             filters: {},
             fields: null,
-            filter: function () {return true;},
             followRelations: true,
             debugMode: false,
         }, options || {});
         this.options.filters = _.extend({
             searchable: true,
         }, this.options.filters);
-
-        if (typeof this.options.followRelations !== 'function') {
-            this.options.followRelations = this.options.followRelations ?
-                function () {return true;} :
-                function () {return false;};
-        }
 
         this.pages = [];
         this.dirty = false;
@@ -204,7 +192,6 @@ var ModelFieldSelector = Widget.extend({
      *                     non-technical names
      */
     _getModelFieldsFromCache: function (model, filters) {
-        var self = this;
         var def = modelFieldsCache.cacheDefs[model];
         if (!def) {
             def = modelFieldsCache.cacheDefs[model] = this._rpc({
@@ -217,12 +204,12 @@ var ModelFieldSelector = Widget.extend({
                     context: this.getSession().user_context,
                 })
                 .then((function (fields) {
-                    modelFieldsCache.cache[model] = sortFields(fields, model, self.options.order);
+                    modelFieldsCache.cache[model] = sortFields(fields, model);
                 }).bind(this));
         }
         return def.then((function () {
             return _.filter(modelFieldsCache.cache[model], function (f) {
-                return (!filters.searchable || f.searchable) && self.options.filter(f);
+                return !filters.searchable || f.searchable;
             });
         }).bind(this));
     },
@@ -266,7 +253,7 @@ var ModelFieldSelector = Widget.extend({
         if (!this._isOpen) return;
 
         this._isOpen = false;
-        this.$popover.addClass('d-none');
+        this.$popover.addClass("hidden");
 
         if (this.dirty) {
             this.dirty = false;
@@ -311,7 +298,7 @@ var ModelFieldSelector = Widget.extend({
     _pushPageData: function (model) {
         var def;
         if (this.model === model && this.options.fields) {
-            def = $.when(sortFields(this.options.fields, model, this.options.order));
+            def = $.when(sortFields(this.options.fields, model));
         } else {
             def = this._getModelFieldsFromCache(model, this.options.filters);
         }
@@ -344,7 +331,7 @@ var ModelFieldSelector = Widget.extend({
         }));
 
         // Toggle the warning message
-        this.$valid.toggleClass('d-none', !!this.isValid());
+        this.$valid.toggleClass("hidden", !!this.isValid());
 
         // Adapt the popover content
         var page = _.last(this.pages);
@@ -357,7 +344,7 @@ var ModelFieldSelector = Widget.extend({
         }
         this.$(".o_field_selector_popover_header .o_field_selector_title").text(title);
         this.$(".o_field_selector_page").replaceWith(core.qweb.render(this.template + ".page", {
-            lines: _.filter(page, this.options.filter),
+            lines: page,
             followRelations: this.options.followRelations,
             debug: this.options.debugMode,
         }));
@@ -388,7 +375,7 @@ var ModelFieldSelector = Widget.extend({
         if (this._isOpen) return;
 
         this._isOpen = true;
-        this.$popover.removeClass('d-none');
+        this.$popover.removeClass("hidden");
     },
     /**
      * Toggles the valid status of the widget and display the error message if
@@ -556,18 +543,16 @@ return ModelFieldSelector;
  *                     contain additional keys "model" and "name" with the field
  *                     name)
  */
-function sortFields(fields, model, order) {
-    var array = _.chain(fields)
+function sortFields(fields, model) {
+    return _.chain(fields)
         .pairs()
-        .sortBy(function (p) { return p[1].string; });
-    if (order !== 'string') {
-        array = array.sortBy(function (p) {return p[1][order]; });
-    }
-    return array.map(function (p) {
+        .sortBy(function (p) { return p[1].string; })
+        .map(function (p) {
             return _.extend({
                 name: p[0],
                 model: model,
             }, p[1]);
-        }).value();
+        })
+        .value();
 }
 });

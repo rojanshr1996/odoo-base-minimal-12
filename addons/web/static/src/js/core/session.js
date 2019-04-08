@@ -3,7 +3,6 @@ odoo.define('web.Session', function (require) {
 
 var ajax = require('web.ajax');
 var concurrency = require('web.concurrency');
-var config = require('web.config');
 var core = require('web.core');
 var mixins = require('web.mixins');
 var utils = require('web.utils');
@@ -39,7 +38,8 @@ var Session = core.Class.extend(mixins.EventDispatcherMixin, {
         this.avoid_recursion = false;
         this.use_cors = options.use_cors || false;
         this.setup(origin);
-        this.debug = config.debug;
+        var debug_param = $.deparam($.param.querystring()).debug;
+        this.debug = (debug_param !== undefined ? debug_param || 1 : false);
 
         // for historic reasons, the session requires a name to properly work
         // (see the methods get_cookie and set_cookie).  We should perhaps
@@ -333,23 +333,7 @@ var Session = core.Class.extend(mixins.EventDispatcherMixin, {
             options.headers["X-Debug-Mode"] = $.deparam($.param.querystring()).debug;
         }
 
-        var deferred = self.check_session_id();
-        var aborted = false;
-        var xhrDef;
-        deferred.abort = function () {
-            if (xhrDef) {
-                xhrDef.abort();
-            } else {
-                aborted = true;
-            }
-        };
-
-        var promise = deferred.then(function () {
-            if (aborted) {
-                var def = $.Deferred().reject({message: "XmlHttpRequestError abort"}, $.Event('abort'));
-                def.abort = function () {};
-                return def;
-            }
+        return self.check_session_id().then(function () {
             // TODO: remove
             if (! _.isString(url)) {
                 _.extend(options, url);
@@ -373,12 +357,8 @@ var Session = core.Class.extend(mixins.EventDispatcherMixin, {
                 url = self.url(url, null);
                 options.session_id = self.session_id || '';
             }
-            xhrDef = fct(url, "call", params, options);
-            return xhrDef;
+            return fct(url, "call", params, options);
         });
-
-        promise.abort = deferred.abort;
-        return promise;
     },
     url: function (path, params) {
         params = _.extend(params || {});
